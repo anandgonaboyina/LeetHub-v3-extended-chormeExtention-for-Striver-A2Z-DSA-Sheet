@@ -40,8 +40,9 @@
 <!-- ## LeetHub progress and numbers (YouTube Video):
 [![LeetHub](https://user-images.githubusercontent.com/43754306/165053510-a757c95e-c3bc-49d5-995c-7a52368abd37.png)](https://www.youtube.com/watch?v=o33PIjqlOgw "LeetHub saves lives!") -->
 
-## What is LeetHub 2.0?
-<p>A <a href="https://chromewebstore.google.com/detail/leethub-v2/mhanfgfagplhgemhjfeolkkdidbakocm">chrome</a> and (new) <a href="https://addons.mozilla.org/en-US/firefox/addon/leethub-v2/">firefox</a> extension that automatically pushes your code to GitHub when you pass all tests on a <a href="https://leetcode.com/">Leetcode</a> problem. It's forked from the original <a href="https://chrome.google.com/webstore/detail/leethub/aciombdipochlnkbpcbgdpjffcfdbggi?hl=en">LeetHub</a> and improves on it to be faster, cleaner and compatible with the new dynamic LeetCode UI.</p>
+## What is LeetHub v3?
+<p>A chrome and firefox extension that automatically pushes your code to GitHub when you pass all tests on a <a href="https://leetcode.com/">Leetcode</a> problem. <strong>NEW in v3:</strong> It now completely supports <strong>Striver's A2Z DSA Sheet</strong> (<a href="https://takeuforward.org/">takeuforward.org</a>)! With a simple click, you can seamlessly sync your Striver sheet solutions directly to a dedicated <code>0000-Strivers-A2Z-DSA-Sheet</code> folder in your repository, complete with an organized global README.</p>
+<p>It's forked from the original LeetHub 2.0 and expands it to be the ultimate companion for students and engineers grinding the most popular DSA sheets.</p>
 
 ## Why LeetHub?
 <p> <strong>1.</strong> Recruiters <em>want</em> to see your contributions to the Open Source community, be it through side projects, solving algorithms/data-structures, or contributing to existing OS projects.<br>
@@ -64,9 +65,9 @@ Moreover, pushing code manually to GitHub from Leetcode is very time consuming. 
 #### BONUS: Star [this repository](https://github.com/arunbhardwaj/LeetHub-2.0) for further development of features. If you want a particular feature, simply [request](https://github.com/arunbhardwaj/LeetHub-2.0/labels/feature) for it!
 
 
-## Why did I decide to work on LeetHub?
+## Why did we build LeetHub v3?
 <p>
-After the 2023 SVB bank closure and growing layoffs, it became clear to me that maintaining your skills is incredibly important. In that effort, it helps to have a source to contain all your learnings over the years: a repo you can go back to and see your commit history and any notes you've taken. With the previous and other extensions broken by recent LeetCode and GitHub changes, I decided to build one out myself using the original as a starting point.
+LeetHub v2 is a fantastic tool for LeetCode, but it lacked support for one of the most comprehensive and widely used DSA resources in the world: <strong>Striver's A2Z DSA Sheet</strong>. Manually managing code files and maintaining a Github repository for Striver's sheet is a huge hassle. By building LeetHub v3, we've extended the core functionality to automatically extract, organize, and upload your takeuforward.org solutions, so you can focus 100% on learning and let the extension seamlessly build your open-source portfolio!
 </p>
 
 # Let's see you ACE that coding interview!
