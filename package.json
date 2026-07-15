@@ -1,8 +1,8 @@
 {
-  "name": "LeetHub v2",
+  "name": "LeetHub v3",
   "version": "2.0.9",
   "private": true,
-  "description": "Automatically integrate your code with LeetCode and GitHub",
+  "description": "Automatically integrate your code with LeetCode, GeeksforGeeks, Striver's A2Z Sheet, and GitHub",
   "type": "module",
   "scripts": {
     "dev": "webpack --mode=production --watch",

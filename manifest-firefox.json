@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "LeetHub v2",
-  "description": "Automatically integrate your Leetcode & GeeksforGeeks submissions to GitHub",
+  "name": "LeetHub v3",
+  "description": "Automatically integrate your Leetcode, GeeksforGeeks & Striver's A2Z Sheet submissions to GitHub",
   "homepage_url": "https://github.com/arunbhardwaj/LeetHub-2.0",
   "version": "__LH_VERSION__",
   "author": "Arun Bhardwaj",
@@ -32,6 +32,11 @@
     {
       "matches": ["https://practice.geeksforgeeks.org/*"],
       "js": ["scripts/gfg.js"]
+    },
+    {
+      "matches": ["https://takeuforward.org/*"],
+      "js": ["scripts/striver.js"],
+      "run_at": "document_idle"
     }
   ],
   "content_security_policy": {
