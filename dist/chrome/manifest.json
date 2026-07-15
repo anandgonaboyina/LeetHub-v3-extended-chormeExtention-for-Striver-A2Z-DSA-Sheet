@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "LeetHub v3",
+  "description": "Automatically integrate your Leetcode, GeeksforGeeks & Striver's A2Z Sheet submissions to GitHub",
+  "homepage_url": "https://github.com/arunbhardwaj/LeetHub-2.0",
+  "version": "2.0.9",
+  "author": "Arun Bhardwaj",
+  "action": {
+    "default_icon": "assets/thumbnail.png",
+    "default_popup": "popup.html",
+    "default_title": "Upload your LeetCode solutions to GitHub"
+  },
+  "icons": {
+    "16": "assets/thumbnail.png",
+    "48": "assets/thumbnail.png",
+    "128": "assets/thumbnail.png"
+  },
+  "background": {
+    "service_worker": "scripts/background.js"
+  },
+  "permissions": [
+    "unlimitedStorage",
+    "storage",
+    "webNavigation"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://leetcode.com/*"
+      ],
+      "js": [
+        "scripts/leetcode.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://github.com/*"
+      ],
+      "js": [
+        "scripts/authorize.js"
+      ]
+    },
+    {
+      "matches": [
+        "https://practice.geeksforgeeks.org/*"
+      ],
+      "js": [
+        "scripts/gfg.js"
+      ]
+    },
+    {
+      "matches": [
+        "https://takeuforward.org/*"
+      ],
+      "js": [
+        "scripts/striver.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
