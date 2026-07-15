@@ -1,7 +1,12 @@
 <h1 align="center">
-  <a href="https://standardjs.com"><img src="assets/octocode.png" alt="LeetHub v2 - Automatically sync your code to GitHub." width="400"></a>
+  <a href="https://standardjs.com"><img src="assets/octocode.png" alt="LeetHub v3 - Automatically sync your code to GitHub." width="400"></a>
   <br>
-  <a href="https://chrome.google.com/webstore/detail/leethub-v2/mhanfgfagplhgemhjfeolkkdidbakocm">LeetHub v2</a> - Automatically sync your code to GitHub.
+  LeetHub v3 - Automatically sync your code to GitHub.
+  <br>
+  <br>
+  <a href="https://github.com/anandgonaboyina/LeetHub-v3-extended-chormeExtention-for-Striver-A2Z-DSA-Sheet/raw/main/LeetHub-v3.zip">
+    <img src="https://img.shields.io/badge/Download-LeetHub%20v3%20Extension%20(.zip)-blue?style=for-the-badge&logo=googlechrome" alt="Download ZIP">
+  </a>
   <br>
   <br>
 </h1>
