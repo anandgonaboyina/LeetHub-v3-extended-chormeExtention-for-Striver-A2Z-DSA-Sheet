@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "LeetHub v3",
+  "name": "LeetHub v4",
   "description": "Automatically integrate your Leetcode, GeeksforGeeks & Striver's A2Z Sheet submissions to GitHub",
   "homepage_url": "https://github.com/arunbhardwaj/LeetHub-2.0",
   "version": "__LH_VERSION__",
@@ -21,7 +21,12 @@
   "permissions": [
     "unlimitedStorage",
     "storage",
-    "webNavigation"
+    "webNavigation",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://api.github.com/*",
+    "https://github.com/*"
   ],
   "content_scripts": [
     {

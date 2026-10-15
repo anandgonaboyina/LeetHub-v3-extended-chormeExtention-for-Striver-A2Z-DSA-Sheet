@@ -21,11 +21,9 @@ const oAuth2 = {
   begin() {
     this.init(); // secure token params.
 
-    let url = `${this.AUTHORIZATION_URL}?client_id=${this.CLIENT_ID}&redirect_uri${this.REDIRECT_URL}&scope=`;
-
-    for (let i = 0; i < this.SCOPES.length; i += 1) {
-      url += this.SCOPES[i];
-    }
+    const redirectUri = encodeURIComponent(this.REDIRECT_URL);
+    const scope = encodeURIComponent(this.SCOPES.join(' '));
+    const url = `${this.AUTHORIZATION_URL}?client_id=${this.CLIENT_ID}&redirect_uri=${redirectUri}&scope=${scope}`;
 
     chrome.storage.local.set({ pipe_leethub: true }, () => {
       // opening pipe temporarily, redirects to github

@@ -15,7 +15,7 @@
   <body>
     <div class="ui grid container">
       <div class="sixteen wide center aligned column">
-        <h1 id="title">Leet<span style="color: #ff6c0a">Hub</span> v2</h1>
+        <h1 id="title">Leet<span style="color: #ff6c0a">Hub</span> v4</h1>
         <p id="caption">Sync your code from LeetCode to GitHub</p>
         <br />
         <!-- Authentication mode -->
@@ -25,10 +25,24 @@
             Authenticate with GitHub to use
             <strong>Leet<span style="color: #ff6c0a">Hub</span></strong>
           </p>
-          <button id="authenticate" class="ui secondary button">
+          <button id="authenticate" class="ui secondary button" style="width: 100%;">
             <i class="icon github"></i>
-            Authenticate
+            Authenticate with GitHub
           </button>
+
+          <div style="margin: 12px 0 6px 0; font-size: 11px; text-align: center;">
+            <a id="toggle_pat" href="#" style="color: #007bff; text-decoration: underline; cursor: pointer;">
+              Or connect with Personal Access Token (PAT)
+            </a>
+          </div>
+
+          <div id="pat_section" style="display: none; margin-top: 10px; text-align: left;">
+            <div class="ui fluid input small" style="margin-bottom: 6px;">
+              <input type="password" id="pat_token_input" placeholder="Paste GitHub Token (ghp_...)" />
+            </div>
+            <button id="save_pat_btn" class="ui primary button small fluid">Connect Token</button>
+            <div id="pat_error" style="color: #db2828; font-size: 11px; margin-top: 4px; display: none;"></div>
+          </div>
         </div>
 
         <!-- Repo Hook mode -->

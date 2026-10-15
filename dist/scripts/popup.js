@@ -222,9 +222,53 @@ let action = false;
 let api = getBrowser()
 
 $('#authenticate').on('click', () => {
-  if (action) {
-    oAuth2.begin();
+  oAuth2.begin();
+});
+
+$('#toggle_pat').on('click', (e) => {
+  e.preventDefault();
+  $('#pat_section').slideToggle(150);
+});
+
+$('#save_pat_btn').on('click', () => {
+  const token = $('#pat_token_input').val().trim();
+  const errorEl = $('#pat_error');
+  errorEl.hide();
+
+  if (!token) {
+    errorEl.text('Please enter a GitHub token.').show();
+    return;
   }
+
+  $('#save_pat_btn').addClass('loading disabled');
+
+  fetch('https://api.github.com/user', {
+    headers: {
+      Authorization: `token ${token}`,
+      Accept: 'application/vnd.github.v3+json'
+    }
+  })
+    .then(async (res) => {
+      $('#save_pat_btn').removeClass('loading disabled');
+      if (res.ok) {
+        const userData = await res.json();
+        api.storage.local.set({
+          leethub_token: token,
+          leethub_username: userData.login,
+          pipe_leethub: false
+        }, () => {
+          const urlOnboarding = api.runtime.getURL('welcome.html');
+          api.tabs.create({ url: urlOnboarding, active: true });
+          window.close();
+        });
+      } else {
+        errorEl.text('Invalid token or token expired (HTTP ' + res.status + ').').show();
+      }
+    })
+    .catch((err) => {
+      $('#save_pat_btn').removeClass('loading disabled');
+      errorEl.text('Network error: ' + err.message).show();
+    });
 });
 
 /* Get URL for welcome page */

@@ -1,6 +1,6 @@
 {
-  "name": "LeetHub v3",
-  "version": "2.0.9",
+  "name": "LeetHub v4",
+  "version": "4.0.0",
   "private": true,
   "description": "Automatically integrate your code with LeetCode, GeeksforGeeks, Striver's A2Z Sheet, and GitHub",
   "type": "module",

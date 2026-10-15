@@ -1,11 +1,11 @@
 <h1 align="center">
-  <a href="https://standardjs.com"><img src="assets/octocode.png" alt="LeetHub v3 - Automatically sync your code to GitHub." width="400"></a>
+  <a href="https://standardjs.com"><img src="assets/octocode.png" alt="LeetHub v4 - Automatically sync your code to GitHub." width="400"></a>
   <br>
-  LeetHub v3 - Automatically sync your code to GitHub.
+  LeetHub v4 - Automatically sync your code to GitHub.
   <br>
   <br>
-  <a href="https://github.com/anandgonaboyina/LeetHub-v3-extended-chormeExtention-for-Striver-A2Z-DSA-Sheet/raw/main/LeetHub-v3.zip">
-    <img src="https://img.shields.io/badge/Download-LeetHub%20v3%20Extension%20(.zip)-blue?style=for-the-badge&logo=googlechrome" alt="Download ZIP">
+  <a href="LeetHub-v4.zip">
+    <img src="https://img.shields.io/badge/Download-LeetHub%20v4%20Extension%20(.zip)-blue?style=for-the-badge&logo=googlechrome" alt="Download ZIP">
   </a>
   <br>
   <br>
@@ -15,34 +15,11 @@
   <a href="https://github.com/arunbhardwaj/LeetHub-2.0/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license"/>
   </a>
-  <!-- <a href="https://discord.gg/anXT9vErxu">
-    <img src="https://img.shields.io/discord/781373810251137074" alt="discord">
-  </a> -->
-  <!-- <a href="https://chrome.google.com/webstore/detail/leethub/aciombdipochlnkbpcbgdpjffcfdbggi">
-    <img src="https://img.shields.io/chrome-web-store/v/aciombdipochlnkbpcbgdpjffcfdbggi.svg" alt="chrome-webstore"/>
-  </a> -->
-  <!-- <a href="https://chrome.google.com/webstore/detail/leethub/aciombdipochlnkbpcbgdpjffcfdbggi">
-    <img src="https://img.shields.io/chrome-web-store/d/aciombdipochlnkbpcbgdpjffcfdbggi.svg" alt="users">
-  </a>
-  <a href="https://github.com/arunbhardwaj/LeetHub-1.1/graphs/contributors" alt="Contributors">
-    <img src="https://img.shields.io/github/contributors/arunbhardwaj/LeetHub-1.1" />
-  </a> -->
 </p>
 
-<!-- <div align="center">
-  <a href="https://www.producthunt.com/posts/leethub?utm_source=badge-featured&utm_medium=badge&utm_souce=badge-leethub" target="_blank">
-    <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=275757&theme=light" alt="LeetHub - Automatically sync your code b/w Leetcode & GitHub. | Product Hunt" />
-  </a>
-
-  [![Chrome](https://user-images.githubusercontent.com/53124886/111952712-34f12300-8aee-11eb-9fdd-ad579a1eb235.png)](https://chrome.google.com/webstore/detail/leethub/aciombdipochlnkbpcbgdpjffcfdbggi) [![Firefox](https://user-images.githubusercontent.com/53124886/126341427-4a4e57aa-767a-467e-83d2-b31fa3564441.png)](https://addons.mozilla.org/en-US/firefox/addon/leethub/)
-</div> -->
-
-<!-- ## LeetHub progress and numbers (YouTube Video):
-[![LeetHub](https://user-images.githubusercontent.com/43754306/165053510-a757c95e-c3bc-49d5-995c-7a52368abd37.png)](https://www.youtube.com/watch?v=o33PIjqlOgw "LeetHub saves lives!") -->
-
-## What is LeetHub v3?
-<p>A chrome and firefox extension that automatically pushes your code to GitHub when you pass all tests on a <a href="https://leetcode.com/">Leetcode</a> problem. <strong>NEW in v3:</strong> It now completely supports <strong>Striver's A2Z DSA Sheet</strong> (<a href="https://takeuforward.org/">takeuforward.org</a>)! With a simple click, you can seamlessly sync your Striver sheet solutions directly to a dedicated <code>0000-Strivers-A2Z-DSA-Sheet</code> folder in your repository, complete with an organized global README.</p>
-<p>It's forked from the original LeetHub 2.0 and expands it to be the ultimate companion for students and engineers grinding the most popular DSA sheets.</p>
+## What is LeetHub v4?
+<p>A chrome and firefox extension that automatically pushes your code to GitHub when you pass all tests on a <a href="https://leetcode.com/">Leetcode</a> problem. <strong>NEW in v4:</strong> It now completely supports <strong>Striver's A2Z DSA Sheet</strong> (<a href="https://takeuforward.org/">takeuforward.org</a>)! With a simple click, you can seamlessly sync your Striver sheet solutions directly to a dedicated <code>0000-Strivers-A2Z-DSA-Sheet</code> folder in your repository, complete with an organized global README.</p>
+<p><strong>v4 Enhancements:</strong> Automatically pre-populates existing solution code directly from GitHub, detects if any changes occurred before updating, and allows full in-place renaming of categories and problem folders directly from the Revision Tracker!</p>
 
 ## Why LeetHub?
 <p> <strong>1.</strong> Recruiters <em>want</em> to see your contributions to the Open Source community, be it through side projects, solving algorithms/data-structures, or contributing to existing OS projects.<br>
