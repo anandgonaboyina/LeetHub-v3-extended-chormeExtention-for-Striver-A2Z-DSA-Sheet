@@ -34,7 +34,8 @@
         "https://leetcode.com/*"
       ],
       "js": [
-        "scripts/leetcode.js"
+        "scripts/leetcode.js",
+        "scripts/striver.js"
       ],
       "run_at": "document_idle"
     },

@@ -293,8 +293,9 @@ function handleMessage(request, sender, sendResponse) {
           }
         };
 
-        /** DELETE all files inside a folder on GitHub. */
-        const ghDeleteFolder = async (folderPath) => {
+        /** DELETE all files inside a folder on GitHub recursively. */
+        const ghDeleteFolder = async (folderPath, commitMsg) => {
+          if (!folderPath || folderPath === STRIVER_ROOT || folderPath === '.' || folderPath === '/') return;
           try {
             const res = await fetch(`https://api.github.com/repos/${leethub_hook}/contents/${folderPath}`, { headers: ghHeaders });
             if (res.ok) {
@@ -302,12 +303,16 @@ function handleMessage(request, sender, sendResponse) {
               if (Array.isArray(items)) {
                 for (const item of items) {
                   if (item.type === 'file') {
-                    await ghDelete(item.path, item.sha, `Clean up old location: ${item.path}`);
+                    await ghDelete(item.path, item.sha, commitMsg || `Clean up old location: ${item.path}`);
+                  } else if (item.type === 'dir') {
+                    await ghDeleteFolder(item.path, commitMsg);
                   }
                 }
               }
             }
-          } catch (e) {}
+          } catch (e) {
+            console.error(`Failed to delete folder ${folderPath}:`, e);
+          }
         };
 
         /** Fetch default repository branch. */
@@ -356,113 +361,206 @@ function handleMessage(request, sender, sendResponse) {
         // and merges with .metadata.json so ALL historical & current problems appear.
         const getAllRepoProblems = async () => {
           const defaultBranch = await getDefaultBranch();
-          const [treeItems, metadata] = await Promise.all([
+          const [treeItems, metadata, rootReadme] = await Promise.all([
             ghGetTree(defaultBranch),
-            getMetadata()
+            getMetadata(),
+            ghGet('README.md')
           ]);
 
-          const problemsMap = new Map(); // key: problemSlug or normalized path
+          const problemsMap = new Map();
           const categoriesSet = new Set();
+          const striverCategoriesSet = new Set();
+          const leetcodeCategoriesSet = new Set();
 
-          // 1. First, index everything from git tree
-          const striverFiles = treeItems.filter(item =>
-            item.path.startsWith(`${STRIVER_ROOT}/`) &&
-            item.type === 'blob' &&
-            item.path !== `${STRIVER_ROOT}/README.md` &&
-            item.path !== METADATA_PATH
-          );
+          // Parse LeetCode topics from root README.md
+          const leetcodeTopicsMap = new Map(); // problemSlug (lowercase) -> topic
+          if (rootReadme && rootReadme.content) {
+            const readmeText = rootReadme.content;
+            const lcStart = readmeText.indexOf('<!---LeetCode Topics Start-->');
+            const lcEnd = readmeText.indexOf('<!---LeetCode Topics End-->');
+            if (lcStart !== -1 && lcEnd !== -1) {
+              const lcSection = readmeText.substring(lcStart, lcEnd);
+              const topicSections = lcSection.split('## ');
+              for (let i = 1; i < topicSections.length; i++) {
+                const lines = topicSections[i].split('\n');
+                const topicName = lines[0].trim();
+                const probMatches = topicSections[i].matchAll(/\|\s*\[([^\]]+)\]/g);
+                for (const m of probMatches) {
+                  const prob = m[1].trim();
+                  leetcodeTopicsMap.set(prob.toLowerCase(), topicName);
+                }
+              }
+            }
+          }
 
-          for (const item of striverFiles) {
-            const relPath = item.path.substring(STRIVER_ROOT.length + 1); // e.g. Arrays/Two-Sum/Two-Sum.cpp
-            const parts = relPath.split('/');
+          // 1. Scan treeItems
+          for (const item of treeItems) {
+            if (item.type !== 'blob') continue;
+            if (item.path === METADATA_PATH || item.path === 'README.md' || item.path === `${STRIVER_ROOT}/README.md`) continue;
+            if (item.path.startsWith('dist/') || item.path.startsWith('assets/') || item.path.startsWith('scripts/') || item.path.startsWith('css/') || item.path.startsWith('spec/')) continue;
 
-            // Skip README files inside folders when identifying solutions, but record folder
+            const parts = item.path.split('/');
             const fileName = parts[parts.length - 1];
             const ext = '.' + fileName.split('.').pop();
             const isCodeFile = codeExtensions.has(ext);
 
             if (!isCodeFile) continue;
 
-            let category = 'General';
-            let subcategory = '';
-            let problemSlug = '';
-            let folderPath = '';
+            // Striver Sheet problems
+            if (item.path.startsWith(`${STRIVER_ROOT}/`)) {
+              const relPath = item.path.substring(STRIVER_ROOT.length + 1);
+              const sParts = relPath.split('/');
+              let category = 'General';
+              let subcategory = '';
+              let problemSlug = '';
+              let folderPath = '';
 
-            if (parts.length === 2) {
-              // 0000-Strivers-A2Z-DSA-Sheet/Two-Sum/solution.cpp OR Arrays/Two-Sum.cpp
-              if (parts[1].startsWith('solution.') || isCodeFile) {
-                problemSlug = parts[0];
-                folderPath = `${STRIVER_ROOT}/${parts[0]}`;
-              } else {
-                category = parts[0];
-                problemSlug = parts[1].replace(/\.[^.]+$/, '');
-                folderPath = `${STRIVER_ROOT}/${parts[0]}`;
+              if (sParts.length === 2) {
+                if (sParts[1].startsWith('solution.') || isCodeFile) {
+                  problemSlug = sParts[0];
+                  folderPath = `${STRIVER_ROOT}/${sParts[0]}`;
+                } else {
+                  category = sParts[0];
+                  problemSlug = sParts[1].replace(/\.[^.]+$/, '');
+                  folderPath = `${STRIVER_ROOT}/${sParts[0]}`;
+                }
+              } else if (sParts.length === 3) {
+                category = sParts[0];
+                problemSlug = sParts[1];
+                folderPath = `${STRIVER_ROOT}/${sParts[0]}/${sParts[1]}`;
+              } else if (sParts.length >= 4) {
+                category = sParts[0];
+                subcategory = sParts[1];
+                problemSlug = sParts[2];
+                folderPath = `${STRIVER_ROOT}/${sParts[0]}/${sParts[1]}/${sParts[2]}`;
               }
-            } else if (parts.length === 3) {
-              // 0000-Strivers-A2Z-DSA-Sheet/Arrays/Two-Sum/solution.cpp OR Arrays/Two-Sum/Two-Sum.cpp
-              category = parts[0];
-              problemSlug = parts[1];
-              folderPath = `${STRIVER_ROOT}/${parts[0]}/${parts[1]}`;
-            } else if (parts.length >= 4) {
-              // 0000-Strivers-A2Z-DSA-Sheet/DP/1D/Frog-Jump/solution.cpp
-              category = parts[0];
-              subcategory = parts[1];
-              problemSlug = parts[2];
-              folderPath = `${STRIVER_ROOT}/${parts[0]}/${parts[1]}/${parts[2]}`;
+
+              if (category && category.includes('/')) {
+                const cParts = category.split('/');
+                category = cParts[0].trim();
+                if (!subcategory && cParts[1]) subcategory = cParts[1].trim();
+              }
+
+              if (category) {
+                categoriesSet.add(category);
+                striverCategoriesSet.add(category);
+              }
+
+              const cleanSlug = stripProblemNumber(problemSlug) || problemSlug;
+              const normKey = 'striver:' + (normalizeSlug(problemSlug) || cleanSlug.toLowerCase());
+              problemsMap.set(normKey, {
+                platform: 'striver',
+                problemSlug: cleanSlug,
+                problemName: slugToTitle(cleanSlug),
+                category,
+                subcategory,
+                language: ext.replace('.', ''),
+                githubPath: item.path,
+                folderPath: folderPath || `${STRIVER_ROOT}/${cleanSlug}`,
+                githubUrl: `https://github.com/${leethub_hook}/blob/${defaultBranch}/${item.path}`,
+                lastUpdated: null,
+                url: '',
+                sha: item.sha
+              });
+            } else {
+              // LeetCode problems
+              // Pattern 1: 0001-two-sum/0001-two-sum.cpp (flat)
+              // Pattern 2: Array/0001-two-sum/0001-two-sum.cpp (categorized)
+              let isLeetCode = false;
+              let lcSlug = '';
+              let lcCat = 'General';
+              let lcFolder = '';
+
+              for (let i = 0; i < parts.length - 1; i++) {
+                if (/^\d{4}-/.test(parts[i]) || leetcodeTopicsMap.has(parts[i].toLowerCase())) {
+                  isLeetCode = true;
+                  lcSlug = parts[i];
+                  lcFolder = parts.slice(0, i + 1).join('/');
+                  if (i > 0) {
+                    lcCat = parts[0];
+                  }
+                  break;
+                }
+              }
+
+              if (isLeetCode && lcSlug) {
+                if (leetcodeTopicsMap.has(lcSlug.toLowerCase())) {
+                  lcCat = leetcodeTopicsMap.get(lcSlug.toLowerCase());
+                }
+                if (lcCat) {
+                  categoriesSet.add(lcCat);
+                  leetcodeCategoriesSet.add(lcCat);
+                }
+
+                const normKey = 'leetcode:' + lcSlug.toLowerCase();
+                problemsMap.set(normKey, {
+                  platform: 'leetcode',
+                  problemSlug: lcSlug,
+                  problemName: lcSlug, // KEEPS NUMBER AS USER REQUESTED!
+                  category: lcCat,
+                  subcategory: '',
+                  language: ext.replace('.', ''),
+                  githubPath: item.path,
+                  folderPath: lcFolder,
+                  githubUrl: `https://github.com/${leethub_hook}/blob/${defaultBranch}/${item.path}`,
+                  lastUpdated: null,
+                  url: `https://leetcode.com/problems/${lcSlug.replace(/^\d{4}-/, '')}/`,
+                  sha: item.sha
+                });
+              }
             }
-
-            if (category) categoriesSet.add(category);
-
-            const cleanSlug = stripProblemNumber(problemSlug) || problemSlug;
-            const normKey = normalizeSlug(problemSlug) || cleanSlug.toLowerCase();
-            problemsMap.set(normKey, {
-              problemSlug: cleanSlug,
-              problemName: slugToTitle(cleanSlug),
-              category,
-              subcategory,
-              language: ext.replace('.', ''),
-              githubPath: item.path,
-              folderPath: folderPath || `${STRIVER_ROOT}/${cleanSlug}`,
-              githubUrl: `https://github.com/${leethub_hook}/blob/${defaultBranch}/${item.path}`,
-              lastUpdated: null,
-              url: '',
-              sha: item.sha
-            });
           }
 
-          // 2. Merge with rich metadata (takes precedence for title, url, timestamp)
+          // 2. Merge with rich metadata
           if (metadata && metadata.problems) {
             for (const mKey in metadata.problems) {
               const meta = metadata.problems[mKey];
-              const safeSlug = sanitizeName(meta.problemName).toLowerCase();
-              const existing = problemsMap.get(safeSlug);
+              const isLc = meta.platform === 'leetcode';
+              const pKey = isLc
+                ? 'leetcode:' + (meta.problemSlug || sanitizeName(meta.problemName)).toLowerCase()
+                : 'striver:' + sanitizeName(meta.problemName).toLowerCase();
+              const existing = problemsMap.get(pKey);
 
-              if (meta.category) categoriesSet.add(meta.category);
+              let metaCat = meta.category || '';
+              let metaSubcat = meta.subcategory || '';
+              if (!isLc && metaCat && metaCat.includes('/')) {
+                const cParts = metaCat.split('/');
+                metaCat = cParts[0].trim();
+                if (!metaSubcat && cParts[1]) metaSubcat = cParts[1].trim();
+              }
+
+              if (metaCat) {
+                categoriesSet.add(metaCat);
+                if (isLc) leetcodeCategoriesSet.add(metaCat);
+                else striverCategoriesSet.add(metaCat);
+              }
 
               if (existing) {
-                existing.problemName = meta.problemName || existing.problemName;
-                existing.category = meta.category || existing.category;
-                existing.subcategory = meta.subcategory || existing.subcategory;
+                existing.problemName = isLc ? (meta.problemName || existing.problemName) : (meta.problemName || existing.problemName);
+                existing.category = isLc ? (meta.category || existing.category) : (metaCat || existing.category);
+                existing.subcategory = metaSubcat || existing.subcategory;
                 existing.language = meta.language || existing.language;
                 existing.url = meta.url || existing.url;
                 existing.lastUpdated = meta.lastUpdated || existing.lastUpdated;
+                existing.commitMsg = meta.commitMsg || existing.commitMsg;
                 if (meta.githubPath) {
                   existing.githubPath = meta.githubPath;
                   existing.githubUrl = `https://github.com/${leethub_hook}/blob/${defaultBranch}/${meta.githubPath}`;
                 }
               } else {
-                // If in metadata but not in git tree (or tree had branch delay)
-                problemsMap.set(safeSlug, {
-                  problemSlug: sanitizeName(meta.problemName),
+                problemsMap.set(pKey, {
+                  platform: isLc ? 'leetcode' : 'striver',
+                  problemSlug: meta.problemSlug || sanitizeName(meta.problemName),
                   problemName: meta.problemName,
-                  category: meta.category || 'General',
-                  subcategory: meta.subcategory || '',
+                  category: isLc ? (meta.category || 'General') : (metaCat || 'General'),
+                  subcategory: metaSubcat || '',
                   language: meta.language || 'cpp',
                   githubPath: meta.githubPath || '',
-                  folderPath: meta.githubPath ? meta.githubPath.substring(0, meta.githubPath.lastIndexOf('/')) : `${STRIVER_ROOT}/${sanitizeName(meta.problemName)}`,
+                  folderPath: meta.folderPath || (isLc ? meta.problemName : `${STRIVER_ROOT}/${sanitizeName(meta.problemName)}`),
                   githubUrl: meta.githubPath ? `https://github.com/${leethub_hook}/blob/${defaultBranch}/${meta.githubPath}` : '',
                   lastUpdated: meta.lastUpdated || new Date().toISOString(),
                   url: meta.url || '',
+                  commitMsg: meta.commitMsg || '',
                   sha: null
                 });
               }
@@ -483,6 +581,10 @@ function handleMessage(request, sender, sendResponse) {
           return {
             problems: problemsList,
             categories: Array.from(categoriesSet).filter(Boolean).sort(),
+            striverCategories: Array.from(striverCategoriesSet).filter(Boolean).sort(),
+            leetcodeCategories: Array.from(leetcodeCategoriesSet).filter(Boolean).sort(),
+            striverCount: problemsList.filter(p => p.platform === 'striver').length,
+            leetcodeCount: problemsList.filter(p => p.platform === 'leetcode').length,
             hook: leethub_hook,
             branch: defaultBranch
           };
@@ -675,6 +777,117 @@ function handleMessage(request, sender, sendResponse) {
             message: `Successfully ${isUpdate ? 'updated' : 'saved'} "${title}" in ${catLabel}!`
           });
 
+        // ===== ACTION: leetcode_save ==========================================
+        } else if (action === 'leetcode_save') {
+          const problemName = (request.problemName || request.title || '0001-unknown').trim();
+          const rawCode = request.code || '';
+          const lang = (request.language || 'cpp').toLowerCase();
+          const category = (request.category || '').trim();
+          const subcategory = (request.subcategory || '').trim();
+          const problemUrl = request.url || '';
+          const statement = request.statement || '';
+          const difficulty = request.difficulty || 'Easy';
+          const commitMsg = request.commitMsg || `Update solution for ${problemName} - LeetHub`;
+          const oldFolderPath = request.oldFolderPath || null;
+          const oldGithubPath = request.oldGithubPath || null;
+
+          if (!rawCode.trim()) {
+            sendResponse({ success: false, error: 'Code cannot be empty.' });
+            return;
+          }
+
+          const ext = langExtMap[lang] || '.cpp';
+          const filename = `${problemName}${ext}`;
+          const safeCat = category ? sanitizeName(category) : '';
+          const newFolderPath = safeCat ? `${safeCat}/${problemName}` : problemName;
+          const solutionPath = `${newFolderPath}/${filename}`;
+          const readmePath = `${newFolderPath}/README.md`;
+
+          // 1. Clean up old location if moved
+          if (oldFolderPath && oldFolderPath !== newFolderPath) {
+            await ghDeleteFolder(oldFolderPath);
+          } else if (oldGithubPath && oldGithubPath !== solutionPath) {
+            await ghDelete(oldGithubPath, null, `Replace old file ${oldGithubPath}`);
+          }
+
+          // 2. Upload solution file
+          await ghPut(solutionPath, rawCode, commitMsg);
+
+          // 3. Upload README.md if statement exists
+          if (statement) {
+            const fullReadme = `<h2><a href="${problemUrl || '#'}">${problemName}</a></h2><h3>${difficulty}</h3><hr>\n${statement}`;
+            await ghPut(readmePath, fullReadme, `Create README for ${problemName}`);
+          }
+
+          // 4. Update root README.md topics
+          if (category) {
+            const rootFile = await ghGet('README.md');
+            if (rootFile) {
+              let rootContent = rootFile.content;
+              const topicHeader = `## ${category}`;
+              const topicTableHeader = `\n${topicHeader}\n|  |\n| ------- |\n`;
+              const probRow = `| [${problemName}](https://github.com/${leethub_hook}/tree/${defaultBranch}/${newFolderPath}) |`;
+
+              const lcStart = '<!---LeetCode Topics Start-->';
+              const lcEnd = '<!---LeetCode Topics End-->';
+              if (!rootContent.includes(lcStart)) {
+                rootContent += `\n\n${lcStart}\n# LeetCode Topics\n${lcEnd}`;
+              }
+
+              if (!rootContent.includes(topicHeader)) {
+                rootContent = rootContent.replace(lcEnd, `${topicTableHeader}${lcEnd}`);
+              }
+
+              if (!rootContent.includes(`[${problemName}]`)) {
+                rootContent = rootContent.replace(topicHeader + '\n|  |\n| ------- |', `${topicHeader}\n|  |\n| ------- |\n${probRow}`);
+              }
+              await ghPut('README.md', rootContent, `Update LeetCode topics: ${problemName} in ${category}`);
+            }
+          }
+
+          // 5. Update .metadata.json
+          const metadata = await getMetadata();
+          metadata.problems[problemName] = {
+            problemName: problemName,
+            platform: 'leetcode',
+            category: category || 'General',
+            subcategory: subcategory || '',
+            language: lang,
+            extension: ext,
+            githubPath: solutionPath,
+            folderPath: newFolderPath,
+            commitMsg: commitMsg,
+            url: problemUrl,
+            lastUpdated: new Date().toISOString()
+          };
+          await saveMetadata(metadata);
+
+          sendResponse({
+            success: true,
+            message: `Successfully saved "${problemName}"${category ? ' in ' + category : ''}!`
+          });
+
+        // ===== ACTION: leetcode_record_metadata ================================
+        } else if (action === 'leetcode_record_metadata') {
+          const metadata = await getMetadata();
+          const problemName = request.problemName;
+          if (problemName) {
+            metadata.problems[problemName] = {
+              problemName: problemName,
+              platform: 'leetcode',
+              category: request.category || 'General',
+              subcategory: request.subcategory || '',
+              language: request.language || 'cpp',
+              githubPath: request.githubPath,
+              folderPath: request.folderPath,
+              commitMsg: request.commitMsg || '',
+              url: request.url || '',
+              lastUpdated: new Date().toISOString()
+            };
+            await saveMetadata(metadata);
+          }
+          sendResponse({ success: true });
+
         // ===== ACTION: striver_get_code =======================================
         } else if (action === 'striver_get_code') {
           let githubPath = request.githubPath || '';
@@ -818,6 +1031,8 @@ function handleMessage(request, sender, sendResponse) {
           const oldGithubPath = request.oldGithubPath || '';
           const newCategory = (request.newCategory || request.category || '').trim();
           const newSubcategory = (request.newSubcategory || request.subcategory || '').trim();
+          const platform = request.platform || (oldFolderPath.startsWith(STRIVER_ROOT) ? 'striver' : 'leetcode');
+          const isLeetCode = platform === 'leetcode';
 
           if (!originalTitle && !newProblemName) {
             sendResponse({ success: false, error: 'Problem name is required to move.' });
@@ -828,14 +1043,22 @@ function handleMessage(request, sender, sendResponse) {
             return;
           }
 
-          const cleanTitle = stripProblemNumber(newProblemName) || newProblemName;
-          const safeTitle = sanitizeName(cleanTitle);
+          // LeetCode: STRICTLY preserve problem number (e.g. 0001-two-sum). Striver: strip leading number
+          const cleanTitle = isLeetCode ? newProblemName : (stripProblemNumber(newProblemName) || newProblemName);
+          const safeTitle = isLeetCode ? cleanTitle : sanitizeName(cleanTitle);
           const safeCat = sanitizeName(newCategory);
           const safeSubcat = newSubcategory ? sanitizeName(newSubcategory) : '';
 
-          let newFolderPath = `${STRIVER_ROOT}/${safeCat}`;
-          if (safeSubcat) newFolderPath += `/${safeSubcat}`;
-          newFolderPath += `/${safeTitle}`;
+          let newFolderPath = '';
+          if (isLeetCode) {
+            newFolderPath = safeCat;
+            if (safeSubcat) newFolderPath += `/${safeSubcat}`;
+            newFolderPath += `/${safeTitle}`;
+          } else {
+            newFolderPath = `${STRIVER_ROOT}/${safeCat}`;
+            if (safeSubcat) newFolderPath += `/${safeSubcat}`;
+            newFolderPath += `/${safeTitle}`;
+          }
 
           if (oldFolderPath === newFolderPath && cleanTitle.toLowerCase() === originalTitle.toLowerCase()) {
             sendResponse({
@@ -899,31 +1122,60 @@ function handleMessage(request, sender, sendResponse) {
           }
 
           // 2. Update master README.md table
-          const masterReadmePath = `${STRIVER_ROOT}/README.md`;
-          const masterFile = await ghGet(masterReadmePath);
-          if (masterFile) {
-            let masterContent = masterFile.content;
-            const catLabel = safeSubcat ? `${newCategory}/${newSubcategory}` : newCategory;
-            const solutionFileName = movedSolutionPath ? movedSolutionPath.split('/').pop() : `${safeTitle}.cpp`;
-            const relativeSolPath = movedSolutionPath
-              ? movedSolutionPath.replace(STRIVER_ROOT + '/', '')
-              : `${safeCat}/${safeSubcat ? safeSubcat + '/' : ''}${safeTitle}/${solutionFileName}`;
-            const newRow = `| [${cleanTitle}](${problemUrl || '#'}) | ${catLabel} | [${solutionFileName}](${relativeSolPath}) |\n`;
+          if (isLeetCode) {
+            // Update root README.md
+            const rootFile = await ghGet('README.md');
+            if (rootFile) {
+              let rootContent = rootFile.content;
+              const topicHeader = `## ${newCategory}`;
+              const topicTableHeader = `\n${topicHeader}\n|  |\n| ------- |\n`;
+              const probRow = `| [${cleanTitle}](https://github.com/${leethub_hook}/tree/${defaultBranch}/${newFolderPath}) |`;
 
-            const escapedOrig = (originalTitle || cleanTitle).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const escapedClean = cleanTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const rowRegex = new RegExp(`\\|\\s*\\[(${escapedOrig}|${escapedClean})\\]\\([^)]*\\)[^\\n]*\\n`, 'g');
-            if (masterContent.match(rowRegex)) {
-              masterContent = masterContent.replace(rowRegex, newRow);
-            } else {
-              masterContent += newRow;
+              // Remove from old topic table if present
+              const escapedClean = cleanTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const escapedOrig = (originalTitle || cleanTitle).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const oldRowRegex = new RegExp(`\\|\\s*\\[(${escapedClean}|${escapedOrig})\\]\\([^)]*\\)[^\\n]*\\n?`, 'g');
+              rootContent = rootContent.replace(oldRowRegex, '');
+
+              const lcStart = '<!---LeetCode Topics Start-->';
+              const lcEnd = '<!---LeetCode Topics End-->';
+              if (!rootContent.includes(lcStart)) {
+                rootContent += `\n\n${lcStart}\n# LeetCode Topics\n${lcEnd}`;
+              }
+              if (!rootContent.includes(topicHeader)) {
+                rootContent = rootContent.replace(lcEnd, `${topicTableHeader}${lcEnd}`);
+              }
+              rootContent = rootContent.replace(topicHeader + '\n|  |\n| ------- |', `${topicHeader}\n|  |\n| ------- |\n${probRow}`);
+              await ghPut('README.md', rootContent, `Update LeetCode topics: ${cleanTitle} in ${newCategory}`);
             }
-            await ghPut(masterReadmePath, masterContent, `Update Master README: ${cleanTitle} in ${catLabel}`);
+          } else {
+            // Update Striver Master README
+            const masterReadmePath = `${STRIVER_ROOT}/README.md`;
+            const masterFile = await ghGet(masterReadmePath);
+            if (masterFile) {
+              let masterContent = masterFile.content;
+              const catLabel = safeSubcat ? `${newCategory}/${newSubcategory}` : newCategory;
+              const solutionFileName = movedSolutionPath ? movedSolutionPath.split('/').pop() : `${safeTitle}.cpp`;
+              const relativeSolPath = movedSolutionPath
+                ? movedSolutionPath.replace(STRIVER_ROOT + '/', '')
+                : `${safeCat}/${safeSubcat ? safeSubcat + '/' : ''}${safeTitle}/${solutionFileName}`;
+              const newRow = `| [${cleanTitle}](${problemUrl || '#'}) | ${catLabel} | [${solutionFileName}](${relativeSolPath}) |\n`;
+
+              const escapedOrig = (originalTitle || cleanTitle).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const escapedClean = cleanTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const rowRegex = new RegExp(`\\|\\s*\\[(${escapedOrig}|${escapedClean})\\]\\([^)]*\\)[^\\n]*\\n`, 'g');
+              if (masterContent.match(rowRegex)) {
+                masterContent = masterContent.replace(rowRegex, newRow);
+              } else {
+                masterContent += newRow;
+              }
+              await ghPut(masterReadmePath, masterContent, `Update Master README: ${cleanTitle} in ${catLabel}`);
+            }
           }
 
           // 3. Update .metadata.json
           const metadata = await getMetadata();
-          const searchKey = problemUrl || safeTitle;
+          const searchKey = isLeetCode ? cleanTitle : (problemUrl || safeTitle);
           let targetMeta = null;
           let targetKey = null;
 
@@ -945,12 +1197,14 @@ function handleMessage(request, sender, sendResponse) {
             targetKey = searchKey;
             targetMeta = {
               problemName: cleanTitle,
+              platform: isLeetCode ? 'leetcode' : 'striver',
               url: problemUrl,
               language: 'cpp'
             };
           }
 
           targetMeta.problemName = cleanTitle;
+          targetMeta.platform = isLeetCode ? 'leetcode' : 'striver';
           targetMeta.category = newCategory;
           targetMeta.subcategory = newSubcategory;
           targetMeta.folderPath = newFolderPath;
@@ -997,13 +1251,31 @@ function handleMessage(request, sender, sendResponse) {
           const metadata = await getMetadata();
 
           let movedCount = 0;
+          let hasLeetCode = false;
+          let hasStriver = false;
+
           for (const prob of matchingProblems) {
             const oldFolder = prob.folderPath || '';
             if (!oldFolder) continue;
 
-            const newFolder = oldFolder.startsWith(oldCatPrefix)
-              ? oldFolder.replace(oldCatPrefix, newCatPrefix)
-              : `${newCatPrefix}/${prob.subcategory ? sanitizeName(prob.subcategory) + '/' : ''}${sanitizeName(stripProblemNumber(prob.problemName))}`;
+            const isLc = prob.platform === 'leetcode';
+            if (isLc) hasLeetCode = true;
+            else hasStriver = true;
+
+            let newFolder = '';
+            if (isLc) {
+              if (oldFolder.startsWith(safeOldCat + '/')) {
+                newFolder = oldFolder.replace(safeOldCat + '/', safeNewCat + '/');
+              } else if (oldFolder === safeOldCat) {
+                newFolder = safeNewCat;
+              } else {
+                newFolder = `${safeNewCat}/${prob.problemName}`;
+              }
+            } else {
+              newFolder = oldFolder.startsWith(oldCatPrefix)
+                ? oldFolder.replace(oldCatPrefix, newCatPrefix)
+                : `${newCatPrefix}/${prob.subcategory ? sanitizeName(prob.subcategory) + '/' : ''}${sanitizeName(stripProblemNumber(prob.problemName))}`;
+            }
 
             // Get all files in oldFolder
             let foundFiles = [];
@@ -1033,7 +1305,7 @@ function handleMessage(request, sender, sendResponse) {
             }
 
             // Update metadata
-            const probKey = prob.url || prob.problemSlug;
+            const probKey = isLc ? prob.problemName : (prob.url || prob.problemSlug);
             let targetMeta = metadata.problems[probKey];
             if (!targetMeta) {
               for (const k in metadata.problems) {
@@ -1054,21 +1326,142 @@ function handleMessage(request, sender, sendResponse) {
 
           await saveMetadata(metadata);
 
-          // Update master README.md table
-          const masterReadmePath = `${STRIVER_ROOT}/README.md`;
-          const masterFile = await ghGet(masterReadmePath);
-          if (masterFile) {
-            let masterContent = masterFile.content;
-            const escapedOld = oldCategory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const catRegex = new RegExp(`(\\|\\s*[^|]+\\|\\s*)${escapedOld}(\\b|/|\\s*\\|)`, 'g');
-            masterContent = masterContent.replace(catRegex, `$1${newCategory}$2`);
-            await ghPut(masterReadmePath, masterContent, `Rename category ${oldCategory} to ${newCategory}`);
+          // Update root README.md if LeetCode problems were moved
+          if (hasLeetCode) {
+            const rootFile = await ghGet('README.md');
+            if (rootFile) {
+              let rootContent = rootFile.content;
+              const escapedOld = oldCategory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const topicRegex = new RegExp(`## ${escapedOld}\\b`, 'g');
+              rootContent = rootContent.replace(topicRegex, `## ${newCategory}`);
+              rootContent = rootContent.replace(new RegExp(`/${safeOldCat}/`, 'g'), `/${safeNewCat}/`);
+              await ghPut('README.md', rootContent, `Rename LeetCode category ${oldCategory} to ${newCategory}`);
+            }
+          }
+
+          // Update master Striver README.md table if Striver problems were moved
+          if (hasStriver) {
+            const masterReadmePath = `${STRIVER_ROOT}/README.md`;
+            const masterFile = await ghGet(masterReadmePath);
+            if (masterFile) {
+              let masterContent = masterFile.content;
+              const escapedOld = oldCategory.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const catRegex = new RegExp(`(\\|\\s*[^|]+\\|\\s*)${escapedOld}(\\b|/|\\s*\\|)`, 'g');
+              masterContent = masterContent.replace(catRegex, `$1${newCategory}$2`);
+              await ghPut(masterReadmePath, masterContent, `Rename category ${oldCategory} to ${newCategory}`);
+            }
           }
 
           sendResponse({
             success: true,
             count: movedCount,
             message: `Successfully renamed category "${oldCategory}" to "${newCategory}" (${movedCount} problems updated)!`
+          });
+
+        // ===== ACTION: striver_delete_problem ===============================
+        // Permanently deletes problem folder from GitHub, cleans README, metadata & stats
+        } else if (action === 'striver_delete_problem') {
+          const problemName = (request.problemName || request.title || '').trim();
+          const folderPath = (request.folderPath || '').trim();
+          const githubPath = (request.githubPath || '').trim();
+          const platform = request.platform || (folderPath.startsWith(STRIVER_ROOT) ? 'striver' : 'leetcode');
+          const isLeetCode = platform === 'leetcode';
+          const defaultBranch = await getDefaultBranch();
+
+          if (!problemName && !folderPath && !githubPath) {
+            sendResponse({ success: false, error: 'Problem information is required to delete.' });
+            return;
+          }
+
+          // 1. Delete problem folder & files from GitHub
+          if (folderPath && folderPath !== STRIVER_ROOT && folderPath !== '.' && folderPath !== '/') {
+            await ghDeleteFolder(folderPath, `Delete problem ${problemName}`);
+          }
+          if (githubPath && (!folderPath || !githubPath.startsWith(folderPath + '/'))) {
+            await ghDelete(githubPath, null, `Delete ${githubPath}`);
+          }
+
+          // 2. Remove problem from README.md
+          if (isLeetCode) {
+            const rootFile = await ghGet('README.md');
+            if (rootFile && rootFile.content) {
+              let rootContent = rootFile.content;
+              const escapedProb = problemName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const cleanProb = stripProblemNumber(problemName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const rowRegex = new RegExp(`\\|\\s*\\[(?:[^\\]]*${escapedProb}[^\\]]*|[^\\]]*${cleanProb}[^\\]]*)\\]\\([^)]*\\)[^\\n]*\\n?`, 'gi');
+              const updatedContent = rootContent.replace(rowRegex, '');
+              if (updatedContent !== rootContent) {
+                await ghPut('README.md', updatedContent, `Delete LeetCode problem ${problemName}`);
+              }
+            }
+          } else {
+            const masterReadmePath = `${STRIVER_ROOT}/README.md`;
+            const masterFile = await ghGet(masterReadmePath);
+            if (masterFile && masterFile.content) {
+              let masterContent = masterFile.content;
+              const escapedProb = problemName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const cleanProb = stripProblemNumber(problemName).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const rowRegex = new RegExp(`\\|\\s*\\[(?:[^\\]]*${escapedProb}[^\\]]*|[^\\]]*${cleanProb}[^\\]]*)\\]\\([^)]*\\)[^\\n]*\\n?`, 'gi');
+              const updatedContent = masterContent.replace(rowRegex, '');
+              if (updatedContent !== masterContent) {
+                await ghPut(masterReadmePath, updatedContent, `Delete Striver problem ${problemName}`);
+              }
+            }
+          }
+
+          // 3. Remove problem from .metadata.json
+          const metadata = await getMetadata();
+          if (metadata && metadata.problems) {
+            const keysToDelete = [];
+            const cleanName = stripProblemNumber(problemName).toLowerCase();
+            for (const k in metadata.problems) {
+              const p = metadata.problems[k];
+              const pClean = stripProblemNumber(p.problemName || '').toLowerCase();
+              if (
+                k === problemName ||
+                (request.url && k === request.url) ||
+                p.problemName === problemName ||
+                (folderPath && p.folderPath === folderPath) ||
+                (cleanName && pClean === cleanName) ||
+                (request.url && p.url === request.url)
+              ) {
+                keysToDelete.push(k);
+              }
+            }
+            if (keysToDelete.length > 0) {
+              keysToDelete.forEach(k => delete metadata.problems[k]);
+              await saveMetadata(metadata);
+            }
+          }
+
+          // 4. Update local stats in api.storage.local
+          try {
+            const data = await api.storage.local.get('stats');
+            if (data && data.stats) {
+              const stats = data.stats;
+              let changed = false;
+              if (stats.shas && stats.shas[problemName]) {
+                const diff = stats.shas[problemName].difficulty;
+                delete stats.shas[problemName];
+                if (stats.solved && stats.solved > 0) stats.solved -= 1;
+                if (diff === 'easy' && stats.easy > 0) stats.easy -= 1;
+                if (diff === 'medium' && stats.medium > 0) stats.medium -= 1;
+                if (diff === 'hard' && stats.hard > 0) stats.hard -= 1;
+                changed = true;
+              }
+              if (folderPath && stats.shas && stats.shas[folderPath]) {
+                delete stats.shas[folderPath];
+                changed = true;
+              }
+              if (changed) {
+                await api.storage.local.set({ stats });
+              }
+            }
+          } catch (e) {}
+
+          sendResponse({
+            success: true,
+            message: `Successfully deleted "${problemName}" and its folder from repository!`
           });
 
         } else {

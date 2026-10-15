@@ -187,10 +187,22 @@ const setPersistentStats = async localStats => {
 
 const isCompleted = problemName => {
   return api.storage.local.get('stats').then(data => {
-    if (data?.stats?.shas?.[problemName] == null) return false;
+    const shas = data?.stats?.shas;
+    if (!shas) return false;
 
-    for (let file of Object.keys(data?.stats?.shas?.[problemName])) {
-      if (file.includes(problemName)) return true;
+    if (shas[problemName]) {
+      for (let file of Object.keys(shas[problemName])) {
+        if (file.includes(problemName)) return true;
+      }
+    }
+
+    // Check categorized entries e.g. "Array/0001-two-sum"
+    for (let key of Object.keys(shas)) {
+      if (key === problemName || key.endsWith('/' + problemName)) {
+        for (let file of Object.keys(shas[key])) {
+          if (file.includes(problemName)) return true;
+        }
+      }
     }
 
     return false;
@@ -369,7 +381,7 @@ function createRepoReadme() {
   return uploadGitWith409Retry(content, readmeFilename, '', readmeMsg);
 }
 
-async function updateReadmeTopicTagsWithProblem(topicTags, problemName) {
+async function updateReadmeTopicTagsWithProblem(topicTags, problemName, folderPath) {
   if (topicTags == null) {
     console.log(new LeetHubError('TopicTagsNotFound'));
     return;
@@ -401,7 +413,7 @@ async function updateReadmeTopicTagsWithProblem(topicTags, problemName) {
   }
   readme = decode(readme);
   for (let topic of topicTags) {
-    readme = appendProblemToReadme(topic.name, readme, leethub_hook, problemName);
+    readme = appendProblemToReadme(topic.name, readme, leethub_hook, problemName, folderPath);
   }
   readme = sortTopicsInReadme(readme);
   readme = encode(readme);
@@ -451,15 +463,19 @@ function loader(leetCode) {
         throw new LeetHubError('LanguageNotFound');
       }
       const filename = problemName + language;
+      const topicTags = leetCode.submissionData?.question?.topicTags;
+      const primaryTopic = topicTags?.[0]?.name ? topicTags[0].name.trim() : '';
+      const folderPath = primaryTopic ? `${primaryTopic}/${problemName}` : problemName;
 
       /* Upload README */
       const uploadReadMe = await api.storage.local.get('stats').then(({ stats }) => {
-        const shaExists = stats?.shas?.[problemName]?.[readmeFilename] !== undefined;
+        const shaExists = stats?.shas?.[folderPath]?.[readmeFilename] !== undefined ||
+                          stats?.shas?.[problemName]?.[readmeFilename] !== undefined;
 
         if (!shaExists) {
           return uploadGitWith409Retry(
             encode(probStatement),
-            problemName,
+            folderPath,
             readmeFilename,
             readmeMsg
           );
@@ -470,17 +486,18 @@ function loader(leetCode) {
       const notes = leetCode.getNotesIfAny();
       let uploadNotes;
       if (notes != undefined && notes.length > 0) {
-        uploadNotes = uploadGitWith409Retry(encode(notes), problemName, 'NOTES.md', createNotesMsg);
+        uploadNotes = uploadGitWith409Retry(encode(notes), folderPath, 'NOTES.md', createNotesMsg);
       }
 
       /* Upload code to Git */
       const code = leetCode.findCode(probStats);
-      const uploadCode = uploadGitWith409Retry(encode(code), problemName, filename, probStats);
+      const uploadCode = uploadGitWith409Retry(encode(code), folderPath, filename, probStats);
 
       /* Group problem into its relevant topics */
       const updateRepoReadMe = updateReadmeTopicTagsWithProblem(
         leetCode.submissionData?.question?.topicTags,
-        problemName
+        problemName,
+        folderPath
       );
 
       const newSHAs = await Promise.all([uploadReadMe, uploadNotes, uploadCode, updateRepoReadMe]);
@@ -490,6 +507,23 @@ function loader(leetCode) {
       if (!alreadyCompleted) {
         // Increments local and persistent stats
         incrementStats(leetCode.difficulty, problemName).then(setPersistentStats);
+      }
+
+      // Record metadata for Revision Tracker
+      try {
+        chrome.runtime.sendMessage({
+          isStriver: true,
+          action: 'leetcode_record_metadata',
+          problemName: problemName,
+          category: primaryTopic || 'General',
+          language: language.replace('.', ''),
+          githubPath: `${folderPath}/${filename}`,
+          folderPath: folderPath,
+          commitMsg: probStats,
+          url: window.location.href
+        });
+      } catch (e) {
+        console.warn('Failed to record leetcode metadata:', e);
       }
     } catch (err) {
       leetCode.markUploadFailed();

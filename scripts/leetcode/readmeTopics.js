@@ -4,8 +4,9 @@ const leetCodeSectionStart = `<!---LeetCode Topics Start-->`;
 const leetCodeSectionHeader = `# LeetCode Topics`;
 const leetCodeSectionEnd = `<!---LeetCode Topics End-->`;
 
-function appendProblemToReadme(topic, markdownFile, hook, problem) {
-  const url = `https://github.com/${hook}/tree/master/${problem}`;
+function appendProblemToReadme(topic, markdownFile, hook, problem, folderPath) {
+  const targetPath = folderPath || problem;
+  const url = `https://github.com/${hook}/tree/master/${targetPath}`;
   const topicHeader = `## ${topic}`;
   const topicTableHeader = `\n${topicHeader}\n|  |\n| ------- |\n`;
   const newRow = `| [${problem}](${url}) |`;
@@ -127,8 +128,10 @@ function sortTopicsInReadme(markdownFile) {
     lines = lines.slice(2);
 
     lines.sort((a, b) => {
-      let numA = parseInt(a.match(/\/(\d+)-/)[1]);
-      let numB = parseInt(b.match(/\/(\d+)-/)[1]);
+      const matchA = a.match(/(?:^|\/|[^\d])(\d{1,5})-/);
+      const matchB = b.match(/(?:^|\/|[^\d])(\d{1,5})-/);
+      const numA = matchA ? parseInt(matchA[1], 10) : 0;
+      const numB = matchB ? parseInt(matchB[1], 10) : 0;
       return numA - numB;
     });
 

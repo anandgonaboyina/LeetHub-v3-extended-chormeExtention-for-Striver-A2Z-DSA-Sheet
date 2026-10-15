@@ -7,13 +7,23 @@
 (function () {
   'use strict';
 
+  // Platform Detection
+  const isLeetCode = window.location.hostname.includes('leetcode.com');
+  const isStriver = window.location.hostname.includes('takeuforward.org');
+
   // State
   let currentExistingProblem = null;
   let cachedCategories = [];
+  let cachedLeetcodeCategories = [];
+  let cachedStriverCategories = [];
   let originalLoadedCode = '';
   let originalLoadedCategory = '';
   let originalLoadedSubcategory = '';
   let originalLoadedTitle = '';
+  let lcCachedStatement = '';
+  let lcCachedDifficulty = 'Easy';
+  let currentPlatform = isLeetCode ? 'leetcode' : (isStriver ? 'striver' : 'all');
+
   const STANDARD_CATEGORIES = [
     'Arrays', 'Strings', 'Binary Search', 'Sorting', 'Recursion',
     'Linked List', 'Stack', 'Queue', 'Heap', 'Trees', 'Graphs',
@@ -117,6 +127,15 @@
       }
       .lh-btn-secondary:hover:not(:disabled) {
         background: #5a6268;
+      }
+
+      .lh-btn-danger {
+        background: var(--lh-danger);
+        color: #fff;
+      }
+      .lh-btn-danger:hover:not(:disabled) {
+        background: #bd2130;
+        box-shadow: 0 4px 12px rgba(220,53,69,0.3);
       }
 
       .lh-btn-sm {
@@ -538,6 +557,54 @@
         border-radius: 4px;
       }
 
+      /* Revision Tracker Platform Tabs */
+      .lh-platform-tabs {
+        display: flex;
+        gap: 4px;
+        background: #f1f3f5;
+        padding: 4px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+      }
+      .lh-platform-tab {
+        flex: 1;
+        padding: 6px 8px;
+        border: none;
+        background: transparent;
+        color: #495057;
+        font-size: 11px;
+        font-weight: 600;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        transition: all 0.15s ease;
+        font-family: var(--lh-font);
+      }
+      .lh-platform-tab:hover {
+        background: rgba(255,255,255,0.7);
+        color: #212529;
+      }
+      .lh-platform-tab.active {
+        background: #fff;
+        color: var(--lh-primary);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      }
+      .lh-count-pill {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 10px;
+        font-size: 10px;
+        background: #e9ecef;
+        color: #495057;
+      }
+      .lh-platform-tab.active .lh-count-pill {
+        background: #e7f1ff;
+        color: var(--lh-primary);
+      }
+
       .lh-cat-pill {
         padding: 4px 10px;
         border-radius: 12px;
@@ -610,6 +677,70 @@
         gap: 6px;
         align-items: center;
         flex-wrap: wrap;
+      }
+
+      /* Subcategory Folder Sections (Combined Display for Striver) */
+      .lh-folder-section {
+        margin: 8px 12px 14px 12px;
+        background: var(--lh-bg);
+        border: 1px solid var(--lh-border);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+      }
+      .lh-folder-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 9px 14px;
+        background: #f1f5f9;
+        border-bottom: 1px solid var(--lh-border);
+        cursor: pointer;
+        user-select: none;
+        font-weight: 600;
+        font-size: 13px;
+        color: #1e293b;
+        transition: background 0.15s ease;
+      }
+      .lh-folder-header:hover {
+        background: #e2e8f0;
+      }
+      .lh-folder-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .lh-folder-chevron {
+        font-size: 10px;
+        transition: transform 0.2s ease;
+        display: inline-block;
+        color: #64748b;
+      }
+      .lh-folder-section.lh-folder-collapsed .lh-folder-chevron {
+        transform: rotate(-90deg);
+      }
+      .lh-folder-section.lh-folder-collapsed .lh-folder-body {
+        display: none;
+      }
+      .lh-folder-badge {
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: #e0f2fe;
+        color: #0369a1;
+        font-weight: 600;
+      }
+      .lh-folder-body {
+        padding: 4px 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .lh-folder-body .lh-sidebar-card {
+        border-bottom: 1px solid #f0f0f0;
+        padding: 10px 14px;
+      }
+      .lh-folder-body .lh-sidebar-card:last-child {
+        border-bottom: none;
       }
 
       .lh-btn-gh {
@@ -896,6 +1027,34 @@
   }
 
   function extractTitle() {
+    if (isLeetCode) {
+      // 1. Try to find title in modern LeetCode UI e.g. "1. Two Sum"
+      const titleEl = document.querySelector('div[class*="text-title-large"]') ||
+                      document.querySelector('[data-cy="question-title"]') ||
+                      document.querySelector('a[href*="/problems/"][class*="text-"]');
+      if (titleEl) {
+        const text = titleEl.innerText.trim();
+        const numMatch = text.match(/^(\d+)[\.\s]+(.*)/);
+        if (numMatch) {
+          const num = String(numMatch[1]).padStart(4, '0');
+          const slug = numMatch[2].toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          return `${num}-${slug}`;
+        }
+      }
+      // 2. Check URL pathname e.g. /problems/two-sum/
+      const pathMatch = window.location.pathname.match(/\/problems\/([^\/]+)/);
+      if (pathMatch) {
+        const slug = pathMatch[1];
+        const docTitle = document.title || '';
+        const numMatch = docTitle.match(/^(\d+)[\.\s]/);
+        if (numMatch) {
+          return `${String(numMatch[1]).padStart(4, '0')}-${slug}`;
+        }
+        return slug;
+      }
+      return '0001-leetcode-problem';
+    }
+
     // Specifically target TakeUForward's ProblemPanel title structure
     const titleEl = document.querySelector('[class*="ProblemPanel-module__"][class*="__title"]') ||
                     document.querySelector('[class*="ProblemPanel"][class*="title"]') ||
@@ -918,7 +1077,84 @@
     return cleanLast.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 
+  async function fetchLeetCodeProblemInfo() {
+    const pathMatch = window.location.pathname.match(/\/problems\/([^\/]+)/);
+    if (!pathMatch) return null;
+    const titleSlug = pathMatch[1];
+
+    try {
+      const res = await fetch('https://leetcode.com/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: `
+            query questionData($titleSlug: String!) {
+              question(titleSlug: $titleSlug) {
+                questionId
+                questionFrontendId
+                title
+                titleSlug
+                difficulty
+                content
+                topicTags {
+                  name
+                  slug
+                }
+              }
+            }
+          `,
+          variables: { titleSlug }
+        })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const q = json?.data?.question;
+        if (q) {
+          const num = String(q.questionFrontendId || '0').padStart(4, '0');
+          const problemName = `${num}-${q.titleSlug}`;
+          lcCachedStatement = q.content || '';
+          lcCachedDifficulty = q.difficulty || 'Easy';
+          return {
+            problemName,
+            title: problemName,
+            difficulty: q.difficulty || 'Easy',
+            statement: q.content || '',
+            topicTags: q.topicTags || [],
+            primaryTopic: q.topicTags?.[0]?.name || 'General',
+            url: `https://leetcode.com/problems/${q.titleSlug}/`
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('LeetHub: GraphQL query failed:', e);
+    }
+    return null;
+  }
+
   function extractProblemData() {
+    if (isLeetCode) {
+      const title = extractTitle();
+      const contentEl = document.querySelector('[data-track-load="description_content"]') ||
+                        document.querySelector('.question-content') ||
+                        document.querySelector('[class*="elfjS"]');
+      let statementHTML = lcCachedStatement || (contentEl ? contentEl.innerHTML : '');
+      let difficulty = lcCachedDifficulty || 'Easy';
+      const diffEl = document.querySelector('[class*="text-difficulty-"], [class*="text-olive"], [class*="text-yellow"], [class*="text-pink"]');
+      if (diffEl) {
+        const t = diffEl.innerText.trim();
+        if (t === 'Easy' || t === 'Medium' || t === 'Hard') difficulty = t;
+      }
+      return {
+        title,
+        url: window.location.href.split('?')[0],
+        statement: statementHTML,
+        examples: '',
+        difficulty
+      };
+    }
+
     const title = extractTitle();
     const url = window.location.href;
 
@@ -1024,6 +1260,24 @@
   }
 
   function detectActiveLanguage() {
+    if (isLeetCode) {
+      const langBtns = Array.from(document.querySelectorAll('button, div[class*="popover"], div[role="button"]'));
+      for (const btn of langBtns) {
+        const text = (btn.textContent || '').trim().toLowerCase();
+        if (text.startsWith('c++') || text === 'cpp') return 'cpp';
+        if (text.startsWith('java') && !text.includes('script')) return 'java';
+        if (text.startsWith('python') || text.startsWith('python3')) return 'py';
+        if (text.startsWith('javascript') || text === 'js') return 'js';
+        if (text.startsWith('typescript') || text === 'ts') return 'ts';
+        if (text === 'c') return 'c';
+        if (text.startsWith('c#') || text === 'csharp') return 'cs';
+        if (text.startsWith('golang') || text === 'go') return 'go';
+        if (text.startsWith('rust')) return 'rs';
+        if (text.startsWith('kotlin')) return 'kt';
+      }
+      return 'cpp';
+    }
+
     const langEl = document.querySelector('[class*="CodePanel-module__"][class*="__languageSelect"] [data-slot="select-value"]') ||
                    document.querySelector('[class*="languageSelect"] [data-slot="select-value"]') ||
                    document.querySelector('[class*="languageSelect"]');
@@ -1081,8 +1335,10 @@
           if (window.monaco && window.monaco.editor) {
             const models = window.monaco.editor.getModels();
             if (models && models.length > 0) {
-              const active = models.find(m => m.uri.toString().includes('tuf-editor')) || models[0];
-              code = active.getValue();
+              const active = models.find(m => m.uri.toString().includes('tuf-editor')) ||
+                             models.find(m => m.getValue().trim().length > 0) ||
+                             models[0];
+              code = active ? active.getValue() : '';
             }
           }
           window.postMessage({ type: 'LH_MONACO_READ_RESULT', code: code }, '*');
@@ -1427,19 +1683,11 @@
     };
   }
 
-  function openSyncPanel() {
+  async function openSyncPanel() {
     createSyncPanel();
     const panel = document.getElementById('lh-sync-panel');
     const getCodePanel = document.getElementById('lh-getcode-panel');
     if (getCodePanel) getCodePanel.classList.remove('lh-panel-open');
-
-    // Extract current question title & URL
-    const probData = extractProblemData();
-    document.getElementById('lh-sync-title').value = probData.title;
-    document.getElementById('lh-sync-url').value = probData.url;
-
-    // Automatically detect and set active editor language
-    document.getElementById('lh-sync-lang').value = detectActiveLanguage();
 
     // Reset code area while checking repo
     const codeBox = document.getElementById('lh-sync-code');
@@ -1449,7 +1697,6 @@
     originalLoadedCode = '';
     originalLoadedCategory = '';
     originalLoadedSubcategory = '';
-    originalLoadedTitle = probData.title;
 
     // Reset status
     const statusBox = document.getElementById('lh-sync-status-box');
@@ -1468,8 +1715,41 @@
     // Open panel smoothly on the left
     panel.classList.add('lh-panel-open');
 
-    // Check if problem already exists in repository
-    checkExistingAndPopulate(probData.title, probData.url);
+    if (isLeetCode) {
+      document.getElementById('lh-sync-lang').value = detectActiveLanguage();
+      document.getElementById('lh-sync-url').value = window.location.href.split('?')[0];
+
+      let initialTitle = extractTitle();
+      document.getElementById('lh-sync-title').value = initialTitle;
+      originalLoadedTitle = initialTitle;
+
+      // Fetch rich info from LeetCode GraphQL
+      const lcInfo = await fetchLeetCodeProblemInfo();
+      let titleToCheck = initialTitle;
+      let urlToCheck = window.location.href;
+      if (lcInfo) {
+        titleToCheck = lcInfo.problemName;
+        urlToCheck = lcInfo.url;
+        document.getElementById('lh-sync-title').value = lcInfo.problemName;
+        document.getElementById('lh-sync-url').value = lcInfo.url;
+        originalLoadedTitle = lcInfo.problemName;
+        if (lcInfo.primaryTopic) {
+          populateCategoriesDropdown(lcInfo.primaryTopic);
+        }
+      }
+
+      checkExistingAndPopulate(titleToCheck, urlToCheck);
+    } else {
+      // Extract current question title & URL
+      const probData = extractProblemData();
+      document.getElementById('lh-sync-title').value = probData.title;
+      document.getElementById('lh-sync-url').value = probData.url;
+      document.getElementById('lh-sync-lang').value = detectActiveLanguage();
+      originalLoadedTitle = probData.title;
+
+      // Check if problem already exists in repository
+      checkExistingAndPopulate(probData.title, probData.url);
+    }
   }
 
   function closeSyncPanel() {
@@ -1633,7 +1913,7 @@
 
     // Check if problem already exists and no changes were made to code or category
     if (currentExistingProblem) {
-      const cleanTitle = stripProblemNumber(title) || title;
+      const cleanTitle = isLeetCode ? title : (stripProblemNumber(title) || title);
       const codeUnchanged = (code.trim() === (originalLoadedCode || '').trim());
       const catUnchanged = (category === (originalLoadedCategory || ''));
       const subcatUnchanged = (subcategory === (originalLoadedSubcategory || ''));
@@ -1645,14 +1925,29 @@
       }
     }
 
-    // Extract the complete, cleaned problem statement & examples
+    // Extract problem statement & examples
     const probData = extractProblemData();
 
     const saveBtn = document.getElementById('lh-sync-save-btn');
     saveBtn.disabled = true;
     saveBtn.innerHTML = '<span class="lh-spinner" style="border-color:rgba(255,255,255,0.3);border-top-color:#fff;"></span> Saving...';
 
-    const payload = {
+    const payload = isLeetCode ? {
+      isStriver: true,
+      action: 'leetcode_save',
+      problemName: title,
+      title: title,
+      url: url,
+      code: code,
+      language: lang,
+      category: category,
+      subcategory: subcategory,
+      statement: lcCachedStatement || probData.statement,
+      difficulty: lcCachedDifficulty || probData.difficulty,
+      commitMsg: currentExistingProblem?.commitMsg || `Update solution for ${title} - LeetHub`,
+      oldFolderPath: currentExistingProblem ? currentExistingProblem.folderPath : null,
+      oldGithubPath: currentExistingProblem ? currentExistingProblem.githubPath : null
+    } : {
       isStriver: true,
       action: 'striver_save',
       title: title,
@@ -1834,6 +2129,18 @@
         <h3 id="lh-sidebar-title">📚 Solved Problems</h3>
         <button class="lh-panel-close" id="lh-sidebar-close">&times;</button>
       </div>
+      <!-- Platform Switcher Tabs (Site-aware default + manual tabs) -->
+      <div class="lh-platform-tabs" id="lh-platform-tabs">
+        <button class="lh-platform-tab" id="lh-tab-platform-leetcode" data-platform="leetcode">
+          <span>💻</span> LeetCode <span class="lh-count-pill" id="lh-count-lc">0</span>
+        </button>
+        <button class="lh-platform-tab" id="lh-tab-platform-striver" data-platform="striver">
+          <span>🎯</span> Striver A2Z <span class="lh-count-pill" id="lh-count-striver">0</span>
+        </button>
+        <button class="lh-platform-tab" id="lh-tab-platform-all" data-platform="all">
+          <span>🌐</span> All <span class="lh-count-pill" id="lh-count-all">0</span>
+        </button>
+      </div>
       <div class="lh-sidebar-filters">
         <input type="text" id="lh-sidebar-search" placeholder="Search problems or categories..." />
         <div style="display:flex;gap:8px;">
@@ -1856,6 +2163,13 @@
       sidebar.classList.remove('lh-sidebar-open');
     };
 
+    // Platform switcher tab listeners
+    sidebar.querySelectorAll('.lh-platform-tab').forEach(tab => {
+      tab.onclick = function () {
+        setPlatformFilter(this.dataset.platform, true);
+      };
+    });
+
     let sortAsc = false;
     document.getElementById('lh-sidebar-sort').onclick = function () {
       sortAsc = !sortAsc;
@@ -1874,7 +2188,7 @@
       renderSidebarList();
     };
 
-    sidebar._data = { problems: [], categories: [], counts: {}, hook: '', branch: 'main' };
+    sidebar._data = { allProblems: [], problems: [], categories: [], counts: {}, hook: '', branch: 'main' };
     sidebar._getSortAsc = () => sortAsc;
   }
 
@@ -1911,49 +2225,121 @@
           return;
         }
 
-        const problems = response.problems || [];
-        const repoCategories = response.categories || [];
-        cachedCategories = repoCategories;
+        const allProblems = response.problems || [];
+        cachedCategories = response.categories || [];
+        cachedLeetcodeCategories = response.leetcodeCategories || [];
+        cachedStriverCategories = response.striverCategories || [];
 
-        // Count problems per category
-        const counts = {};
-        problems.forEach(p => {
-          const c = p.category || 'General';
-          counts[c] = (counts[c] || 0) + 1;
-        });
+        const lcCount = response.leetcodeCount || allProblems.filter(p => p.platform === 'leetcode').length;
+        const striverCount = response.striverCount || allProblems.filter(p => p.platform === 'striver').length;
+        const totalCount = allProblems.length;
 
-        // Combined standard and repository categories
-        const allCatSet = new Set([...STANDARD_CATEGORIES, ...repoCategories]);
-        const sortedCats = Array.from(allCatSet).sort();
+        // Update count badges on platform tabs
+        const lcBadge = document.getElementById('lh-count-lc');
+        const striverBadge = document.getElementById('lh-count-striver');
+        const allBadge = document.getElementById('lh-count-all');
+        if (lcBadge) lcBadge.textContent = lcCount;
+        if (striverBadge) striverBadge.textContent = striverCount;
+        if (allBadge) allBadge.textContent = totalCount;
 
         sidebar._data = {
-          problems: problems,
-          categories: sortedCats,
-          counts: counts,
+          allProblems: allProblems,
+          problems: allProblems,
+          categories: response.categories || [],
+          leetcodeCategories: response.leetcodeCategories || [],
+          striverCategories: response.striverCategories || [],
+          counts: {},
           hook: response.hook || '',
           branch: response.branch || 'main'
         };
 
-        const totalCount = problems.length;
-        document.getElementById('lh-sidebar-title').textContent = `📚 Solved Problems (${totalCount})`;
+        // If user hasn't explicitly clicked a tab, use site-aware default:
+        // leetcode.com -> 'leetcode', takeuforward.org -> 'striver', else 'all'
+        if (!sidebar._platformUserSelected) {
+          currentPlatform = isLeetCode ? 'leetcode' : (isStriver ? 'striver' : 'all');
+        }
 
-        // Populate dropdown with counts matching the sync form
-        const catFilter = document.getElementById('lh-sidebar-cat-filter');
-        catFilter.innerHTML = `<option value="">All Categories (${totalCount})</option>`;
-        sortedCats.forEach(c => {
-          const count = counts[c] || 0;
-          const opt = document.createElement('option');
-          opt.value = c;
-          opt.textContent = `${c}${count > 0 ? ` (${count})` : ''}`;
-          catFilter.appendChild(opt);
-        });
-
-        // Render horizontal category pills/tabs
-        renderCategoryPills(sortedCats, counts, totalCount);
-
-        renderSidebarList();
+        setPlatformFilter(currentPlatform, true);
       }
     );
+  }
+
+  function setPlatformFilter(platform, shouldRender = true) {
+    currentPlatform = platform;
+    const sidebar = document.getElementById('lh-sidebar');
+    if (sidebar) sidebar._platformUserSelected = true;
+
+    // Update active tab buttons
+    document.querySelectorAll('.lh-platform-tab').forEach(t => {
+      if (t.dataset.platform === platform) t.classList.add('active');
+      else t.classList.remove('active');
+    });
+
+    if (!sidebar || !sidebar._data) return;
+
+    const all = sidebar._data.allProblems || [];
+    let activeProblems = all;
+    let activeCats = [];
+
+    if (platform === 'leetcode') {
+      activeProblems = all.filter(p => p.platform === 'leetcode');
+      activeCats = sidebar._data.leetcodeCategories || [];
+    } else if (platform === 'striver') {
+      activeProblems = all.filter(p => p.platform === 'striver');
+      activeCats = sidebar._data.striverCategories || [];
+    } else {
+      activeProblems = all;
+      activeCats = sidebar._data.categories || [];
+    }
+
+    // Counts per category for this platform (aggregate Striver subcategories into main category)
+    const counts = {};
+    const striverMainCats = new Set();
+    activeProblems.forEach(p => {
+      let c = p.category || 'General';
+      if (p.platform === 'striver') {
+        c = c.split('/')[0].trim();
+        striverMainCats.add(c);
+      }
+      counts[c] = (counts[c] || 0) + 1;
+    });
+
+    if (platform === 'striver') {
+      activeCats = Array.from(new Set([
+        ...(sidebar._data.striverCategories || []).map(c => c.split('/')[0].trim()),
+        ...striverMainCats
+      ])).filter(Boolean);
+    }
+
+    const combinedCats = new Set([...STANDARD_CATEGORIES, ...activeCats]);
+    const sortedCats = Array.from(combinedCats).sort();
+
+    sidebar._data.problems = activeProblems;
+    sidebar._data.activeCategories = sortedCats;
+    sidebar._data.counts = counts;
+
+    const platName = platform === 'leetcode' ? 'LeetCode' : (platform === 'striver' ? 'Striver A2Z' : 'All');
+    document.getElementById('lh-sidebar-title').textContent = `📚 ${platName} (${activeProblems.length})`;
+
+    // Rebuild Category Dropdown
+    const catFilter = document.getElementById('lh-sidebar-cat-filter');
+    catFilter.innerHTML = `<option value="">All Categories (${activeProblems.length})</option>`;
+    sortedCats.forEach(c => {
+      const count = counts[c] || 0;
+      if (count > 0 || STANDARD_CATEGORIES.includes(c)) {
+        const opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = `${c}${count > 0 ? ` (${count})` : ''}`;
+        catFilter.appendChild(opt);
+      }
+    });
+
+    // Rebuild Category Pills
+    renderCategoryPills(sortedCats, counts, activeProblems.length);
+
+    if (shouldRender) {
+      renderSidebarList();
+    }
   }
 
   function renderCategoryPills(categories, counts, totalCount) {
@@ -2005,6 +2391,75 @@
     });
   }
 
+  function createProblemCard(problem, hook, branch) {
+    const card = document.createElement('div');
+    card.className = 'lh-sidebar-card';
+
+    let catDisplay = problem.category || 'General';
+    if (problem.subcategory) catDisplay += ' > ' + problem.subcategory;
+
+    const ghUrl = problem.githubUrl || (hook && problem.githubPath ? `https://github.com/${hook}/blob/${branch}/${problem.githubPath}` : '');
+    const isLcProb = problem.platform === 'leetcode';
+
+    card.innerHTML = `
+      <div class="lh-sidebar-card-top">
+        <div style="flex:1; min-width:0;">
+          <div class="lh-sidebar-item-title" title="${escapeHtml(problem.problemName)}">${escapeHtml(problem.problemName)}</div>
+          <div class="lh-sidebar-item-meta">
+            <span class="lh-badge" style="background:${isLcProb ? '#fff3cd;color:#856404' : '#e3f2fd;color:#1565c0'};">${isLcProb ? '💻 LeetCode' : '🎯 Striver'}</span>
+            <span class="lh-badge">${escapeHtml(catDisplay)}</span>
+            ${problem.language ? `<span class="lh-badge" style="background:#f3e8ff;color:#6b21a8;">${escapeHtml(problem.language.toUpperCase())}</span>` : ''}
+            <span class="lh-time-ago">${timeAgo(problem.lastUpdated)}</span>
+          </div>
+        </div>
+      </div>
+      <div class="lh-card-actions">
+        <button class="lh-btn lh-btn-sm lh-btn-primary lh-card-btn-view" title="View Question and Solution Code">
+          <span>📖</span> View
+        </button>
+        <button class="lh-btn lh-btn-sm lh-btn-gh lh-card-btn-gh" title="Open file on GitHub">
+          <span>🐙</span> GitHub
+        </button>
+        <button class="lh-btn lh-btn-sm lh-btn-outline lh-card-btn-move" title="Edit Problem Title, Folder Name, or Move Category">
+          <span>✏️</span> Edit / Move
+        </button>
+        <button class="lh-btn lh-btn-sm lh-btn-danger lh-card-btn-delete" title="Delete problem and folder from repository">
+          <span>🗑️</span> Delete
+        </button>
+      </div>
+    `;
+
+    // View button
+    card.querySelector('.lh-card-btn-view').onclick = (e) => {
+      e.stopPropagation();
+      openQAModal(problem);
+    };
+
+    // GitHub button
+    card.querySelector('.lh-card-btn-gh').onclick = (e) => {
+      e.stopPropagation();
+      if (ghUrl) {
+        window.open(ghUrl, '_blank');
+      } else {
+        showToast('GitHub link not available', 'error');
+      }
+    };
+
+    // Edit/Move button
+    card.querySelector('.lh-card-btn-move').onclick = (e) => {
+      e.stopPropagation();
+      openMoveModal(problem);
+    };
+
+    // Delete button
+    card.querySelector('.lh-card-btn-delete').onclick = (e) => {
+      e.stopPropagation();
+      openDeleteModal(problem);
+    };
+
+    return card;
+  }
+
   function renderSidebarList() {
     const sidebar = document.getElementById('lh-sidebar');
     const listEl = document.getElementById('lh-sidebar-list');
@@ -2020,7 +2475,20 @@
         (p.problemName && p.problemName.toLowerCase().includes(searchVal)) ||
         (p.category && p.category.toLowerCase().includes(searchVal)) ||
         (p.subcategory && p.subcategory.toLowerCase().includes(searchVal));
-      const matchCat = !catVal || p.category === catVal;
+
+      let matchCat = !catVal;
+      if (catVal) {
+        if (p.platform === 'striver') {
+          const pMainCat = (p.category ? p.category.split('/')[0].trim() : 'General').toLowerCase();
+          const targetCat = catVal.toLowerCase();
+          matchCat = (pMainCat === targetCat) ||
+                     (p.category && p.category.toLowerCase() === targetCat) ||
+                     (p.category && p.category.toLowerCase().startsWith(targetCat + '/'));
+        } else {
+          // LeetCode: keep exactly as it was
+          matchCat = (p.category === catVal);
+        }
+      }
       return matchSearch && matchCat;
     });
 
@@ -2051,64 +2519,169 @@
     const hook = data.hook || '';
     const branch = data.branch || 'main';
 
+    // Striver: When a category is selected, combinely display all subcategories in collapsible folders
+    // LeetCode: Keep as it was (flat list of cards)
+    const hasStriverProblems = filtered.some(p => p.platform === 'striver');
+    const shouldFolderGroup = (currentPlatform === 'striver' || (currentPlatform === 'all' && hasStriverProblems)) && !!catVal;
+
+    if (shouldFolderGroup) {
+      const subcatMap = new Map();
+      let hasSubcategories = false;
+
+      filtered.forEach(p => {
+        let sub = '';
+        if (p.platform === 'striver') {
+          sub = (p.subcategory || '').trim();
+          if (!sub && p.category && p.category.includes('/')) {
+            sub = p.category.split('/')[1].trim();
+          }
+        }
+        if (sub) hasSubcategories = true;
+        const key = sub || 'General';
+        if (!subcatMap.has(key)) {
+          subcatMap.set(key, []);
+        }
+        subcatMap.get(key).push(p);
+      });
+
+      if (hasSubcategories) {
+        const sortedSubcatKeys = Array.from(subcatMap.keys()).sort((a, b) => {
+          if (a === 'General') return 1;
+          if (b === 'General') return -1;
+          return a.localeCompare(b);
+        });
+
+        sortedSubcatKeys.forEach(subName => {
+          const groupProblems = subcatMap.get(subName) || [];
+          if (groupProblems.length === 0) return;
+
+          const folderSection = document.createElement('div');
+          folderSection.className = 'lh-folder-section';
+
+          const folderHeader = document.createElement('div');
+          folderHeader.className = 'lh-folder-header';
+          folderHeader.innerHTML = `
+            <div class="lh-folder-title">
+              <span class="lh-folder-chevron">▼</span>
+              <span class="lh-folder-icon">📁</span>
+              <span>${escapeHtml(subName)}</span>
+            </div>
+            <span class="lh-folder-badge">${groupProblems.length} ${groupProblems.length === 1 ? 'problem' : 'problems'}</span>
+          `;
+
+          const folderBody = document.createElement('div');
+          folderBody.className = 'lh-folder-body';
+
+          groupProblems.forEach(problem => {
+            folderBody.appendChild(createProblemCard(problem, hook, branch));
+          });
+
+          folderHeader.onclick = () => {
+            folderSection.classList.toggle('lh-folder-collapsed');
+          };
+
+          folderSection.appendChild(folderHeader);
+          folderSection.appendChild(folderBody);
+          listEl.appendChild(folderSection);
+        });
+        return;
+      }
+    }
+
+    // Default / LeetCode rendering: Flat cards list (keeps LeetCode exactly as it was)
     filtered.forEach(problem => {
-      const card = document.createElement('div');
-      card.className = 'lh-sidebar-card';
+      listEl.appendChild(createProblemCard(problem, hook, branch));
+    });
+  }
 
-      let catDisplay = problem.category || 'General';
-      if (problem.subcategory) catDisplay += ' > ' + problem.subcategory;
+  // =========================================================================
+  // SECTION 7A-2: Delete Problem Confirmation Modal
+  // =========================================================================
 
-      const ghUrl = problem.githubUrl || (hook && problem.githubPath ? `https://github.com/${hook}/blob/${branch}/${problem.githubPath}` : '');
-
-      card.innerHTML = `
-        <div class="lh-sidebar-card-top">
-          <div style="flex:1; min-width:0;">
-            <div class="lh-sidebar-item-title" title="${escapeHtml(problem.problemName)}">${escapeHtml(problem.problemName)}</div>
-            <div class="lh-sidebar-item-meta">
-              <span class="lh-badge">${escapeHtml(catDisplay)}</span>
-              ${problem.language ? `<span class="lh-badge" style="background:#f3e8ff;color:#6b21a8;">${escapeHtml(problem.language.toUpperCase())}</span>` : ''}
-              <span class="lh-time-ago">${timeAgo(problem.lastUpdated)}</span>
+  function openDeleteModal(problem, onDeleted) {
+    let backdrop = document.getElementById('lh-delete-backdrop');
+    if (!backdrop) {
+      backdrop = document.createElement('div');
+      backdrop.id = 'lh-delete-backdrop';
+      backdrop.className = 'lh-modal-backdrop';
+      backdrop.innerHTML = `
+        <div class="lh-dialog-modal" style="max-width: 440px;">
+          <div class="lh-dialog-modal-header" style="background:#fff5f5; border-bottom:1px solid #fed7d7;">
+            <h3 style="color:var(--lh-danger);"><span>🗑️</span> Delete Problem</h3>
+            <button class="lh-panel-close" id="lh-delete-close-btn">&times;</button>
+          </div>
+          <div class="lh-dialog-modal-body">
+            <p style="font-size:14px; margin:0 0 12px 0; color:var(--lh-text);">
+              Are you sure you want to delete <b id="lh-delete-prob-name" style="color:var(--lh-text);"></b> from your repository?
+            </p>
+            <div style="background:#fff3cd; border:1px solid #ffeeba; border-radius:6px; padding:10px 12px; margin-bottom:14px; font-size:12px; color:#856404; line-height:1.4;">
+              ⚠️ <b>Warning:</b> This will permanently remove the problem folder and all its files from GitHub, delete it from your README, and update your stats.
+            </div>
+            <div class="lh-form-group" style="margin-bottom:0;">
+              <label style="font-size:11px; text-transform:uppercase; color:var(--lh-text-muted);">Folder to be deleted</label>
+              <div id="lh-delete-folder-box" style="font-family:'Consolas',monospace; font-size:12px; background:var(--lh-bg-subtle); padding:8px 10px; border-radius:4px; border:1px solid var(--lh-border); color:var(--lh-danger); word-break:break-all;"></div>
             </div>
           </div>
-        </div>
-        <div class="lh-card-actions">
-          <button class="lh-btn lh-btn-sm lh-btn-primary lh-card-btn-view" title="View Question and Solution Code">
-            <span>📖</span> View
-          </button>
-          <button class="lh-btn lh-btn-sm lh-btn-gh lh-card-btn-gh" title="Open file on GitHub">
-            <span>🐙</span> GitHub
-          </button>
-          <button class="lh-btn lh-btn-sm lh-btn-outline lh-card-btn-move" title="Edit Problem Title, Folder Name, or Move Category">
-            <span>✏️</span> Edit / Move
-          </button>
+          <div class="lh-dialog-modal-footer">
+            <button class="lh-btn lh-btn-secondary" id="lh-delete-cancel-btn">Cancel</button>
+            <button class="lh-btn lh-btn-danger" id="lh-delete-confirm-btn"><span>🗑️</span> Confirm Delete</button>
+          </div>
         </div>
       `;
+      document.body.appendChild(backdrop);
 
-      // Two main action buttons + Edit/Move button
-      const btnView = card.querySelector('.lh-card-btn-view');
-      btnView.onclick = (e) => {
-        e.stopPropagation();
-        openQAModal(problem);
+      document.getElementById('lh-delete-close-btn').onclick = closeDeleteModal;
+      document.getElementById('lh-delete-cancel-btn').onclick = closeDeleteModal;
+      backdrop.onclick = (e) => {
+        if (e.target === backdrop) closeDeleteModal();
       };
+    }
 
-      const btnGh = card.querySelector('.lh-card-btn-gh');
-      btnGh.onclick = (e) => {
-        e.stopPropagation();
-        if (ghUrl) {
-          window.open(ghUrl, '_blank');
-        } else {
-          showToast('GitHub link not available', 'error');
+    const nameEl = document.getElementById('lh-delete-prob-name');
+    if (nameEl) nameEl.textContent = problem.problemName;
+
+    const folderBox = document.getElementById('lh-delete-folder-box');
+    if (folderBox) folderBox.textContent = problem.folderPath || problem.githubPath || 'N/A';
+
+    const confirmBtn = document.getElementById('lh-delete-confirm-btn');
+    confirmBtn.disabled = false;
+    confirmBtn.innerHTML = '<span>🗑️</span> Confirm Delete';
+
+    confirmBtn.onclick = function () {
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<span class="lh-spinner" style="border-color:rgba(255,255,255,0.3);border-top-color:#fff;"></span> Deleting...';
+
+      chrome.runtime.sendMessage(
+        {
+          isStriver: true,
+          action: 'striver_delete_problem',
+          problemName: problem.problemName,
+          folderPath: problem.folderPath || '',
+          githubPath: problem.githubPath || '',
+          platform: problem.platform || (isLeetCode ? 'leetcode' : 'striver'),
+          url: problem.url || ''
+        },
+        function (response) {
+          if (response && response.success) {
+            closeDeleteModal();
+            if (typeof onDeleted === 'function') onDeleted();
+            showToast(response.message || 'Problem deleted successfully!', 'success', 3500);
+            loadSidebarData();
+          } else {
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '<span>🗑️</span> Confirm Delete';
+            showToast('Failed to delete: ' + (response ? response.error : 'Unknown error'), 'error', 4500);
+          }
         }
-      };
+      );
+    };
 
-      const btnMove = card.querySelector('.lh-card-btn-move');
-      btnMove.onclick = (e) => {
-        e.stopPropagation();
-        openMoveModal(problem);
-      };
+    backdrop.classList.add('lh-modal-open');
+  }
 
-      listEl.appendChild(card);
-    });
+  function closeDeleteModal() {
+    const backdrop = document.getElementById('lh-delete-backdrop');
+    if (backdrop) backdrop.classList.remove('lh-modal-open');
   }
 
   // =========================================================================
@@ -2192,7 +2765,11 @@
     // Populate category dropdown
     const moveCatSelect = document.getElementById('lh-move-category-select');
     moveCatSelect.innerHTML = '';
-    const allCatSet = new Set([...STANDARD_CATEGORIES, ...cachedCategories]);
+    const isLc = problem.platform === 'leetcode';
+    const sourceCats = isLc
+      ? (cachedLeetcodeCategories.length ? cachedLeetcodeCategories : cachedCategories)
+      : (cachedStriverCategories.length ? cachedStriverCategories : cachedCategories);
+    const allCatSet = new Set([...STANDARD_CATEGORIES, ...sourceCats]);
     if (problem.category) allCatSet.add(problem.category);
 
     const defaultOpt = document.createElement('option');
@@ -2252,7 +2829,8 @@
           oldFolderPath: problem.folderPath || '',
           oldGithubPath: problem.githubPath || '',
           newCategory: selectedCat,
-          newSubcategory: subcat
+          newSubcategory: subcat,
+          platform: problem.platform || (isLeetCode ? 'leetcode' : 'striver')
         },
         function (response) {
           if (response && response.success) {
@@ -2502,6 +3080,7 @@
           </div>
           <div class="lh-dialog-modal-footer">
             <button class="lh-btn lh-btn-secondary" id="lh-qa-footer-close">Close</button>
+            <button class="lh-btn lh-btn-danger" id="lh-qa-footer-delete"><span>🗑️</span> Delete</button>
             <button class="lh-btn lh-btn-outline" id="lh-qa-footer-move"><span>📁</span> Move Category</button>
             <button class="lh-btn lh-btn-gh" id="lh-qa-footer-gh"><span>🐙</span> View on GitHub</button>
           </div>
@@ -2543,12 +3122,17 @@
     let catDisplay = problem.category || 'General';
     if (problem.subcategory) catDisplay += ` > ${problem.subcategory}`;
 
+    const isLcProb = problem.platform === 'leetcode';
+    const siteLinkText = isLcProb ? '🔗 Open Problem on LeetCode &rarr;' : '🔗 Open Problem on TakeUForward &rarr;';
+    const siteUrl = problem.url || (isLcProb ? `https://leetcode.com/problems/${problem.problemSlug || problem.problemName.replace(/^\d+-/, '')}/` : '');
+
     const metaBar = document.getElementById('lh-qa-meta-bar');
     metaBar.innerHTML = `
+      <span class="lh-badge" style="background:${isLcProb ? '#fff3cd;color:#856404' : '#e3f2fd;color:#1565c0'};">${isLcProb ? '💻 LeetCode' : '🎯 Striver'}</span>
       <span class="lh-badge">${escapeHtml(catDisplay)}</span>
       ${problem.language ? `<span class="lh-badge" style="background:#f3e8ff;color:#6b21a8;">${escapeHtml(problem.language.toUpperCase())}</span>` : ''}
       <span class="lh-time-ago">${timeAgo(problem.lastUpdated)}</span>
-      ${problem.url ? `<a href="${escapeHtml(problem.url)}" target="_blank" style="margin-left:auto;font-size:12px;color:var(--lh-primary);text-decoration:none;font-weight:600;">🔗 Open Problem on TakeUForward &rarr;</a>` : ''}
+      ${siteUrl ? `<a href="${escapeHtml(siteUrl)}" target="_blank" style="margin-left:auto;font-size:12px;color:var(--lh-primary);text-decoration:none;font-weight:600;">${siteLinkText}</a>` : ''}
     `;
 
     // Reset to Question tab
@@ -2560,6 +3144,10 @@
     paneC.innerHTML = '<div class="lh-empty-state"><span class="lh-spinner"></span> Loading solution code from repository...</div>';
 
     // Footer buttons setup
+    document.getElementById('lh-qa-footer-delete').onclick = () => {
+      openDeleteModal(problem, () => closeQAModal());
+    };
+
     document.getElementById('lh-qa-footer-move').onclick = () => {
       closeQAModal();
       openMoveModal(problem);
